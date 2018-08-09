@@ -7,9 +7,9 @@ module Unlit.String (
   , Error(..), showError
 ) where
 
-import Data.Functor ((<$>))
-import Data.Foldable (asum)
 import Data.Bool (bool)
+import Data.Foldable (asum)
+import Data.Functor ((<$>))
 import Data.Maybe (fromMaybe, maybeToList)
 import Data.Monoid ((<>))
 import Prelude hiding (all, or)
@@ -20,6 +20,7 @@ stripStart, stripEnd, toLower :: String -> String
 stripStart = dropWhile Char.isSpace
 stripEnd   = dropWhileEnd Char.isSpace
 toLower    = map Char.toLower
+import Prelude hiding (all, or, String, unlines, lines, drop)
 
 data Delimiter
   = LaTeX    BeginEnd
@@ -152,7 +153,8 @@ match  _                  _                   = False
 
 type Style = [Delimiter]
 
-all, backtickfence, tildefence, bird, haskell, infer, jekyll, latex, markdown, orgmode, asciidoc :: Style
+all, backtickfence, tildefence, bird, haskell, infer,
+  jekyll, latex, markdown, orgmode, asciidoc :: Style
 all           = latex <> markdown <> orgmode <> jekyll <> asciidoc
 backtickfence = [Markdown Backtick Nothing]
 tildefence    = [Markdown Tilde Nothing]
@@ -223,10 +225,10 @@ unlit' _ _ (Just Bird) []  = Right []
 unlit' _ _ (Just o)    []  = Left $ UnexpectedEnd o
 unlit' ws ss q ((n, l):ls) = case (q, q') of
 
-  (Nothing  , Nothing)   -> continue  $ lineIfKeepAll
+  (Nothing  , Nothing)   -> continue  lineIfKeepAll
 
-  (Just Bird, Nothing)   -> close     $ lineIfKeepAll
-  (Just _o  , Nothing)   -> continue  $ [l]
+  (Just Bird, Nothing)   -> close     lineIfKeepAll
+  (Just _o  , Nothing)   -> continue  [l]
 
   (Nothing  , Just Bird) -> open      $ lineIfKeepIndent <> [stripBird' ws l]
   (Nothing  , Just (Asciidoc Begin _))
@@ -236,16 +238,16 @@ unlit' ws ss q ((n, l):ls) = case (q, q') of
     | isBegin c          -> open      $ lineIfKeepAll <> lineIfKeepIndent
     | otherwise          -> Left      $ SpuriousDelimiter n c
 
-  (Just Bird, Just Bird) -> continue  $ [stripBird' ws l]
-  (Just _o  , Just Bird) -> continue  $ [l]
+  (Just Bird, Just Bird) -> continue  [stripBird' ws l]
+  (Just _o  , Just Bird) -> continue  [l]
   (Just o   , Just c)
-    | o `match` c        -> close     $ lineIfKeepAll
+    | o `match` c        -> close     lineIfKeepAll
     | otherwise          -> Left      $ SpuriousDelimiter n c
 
   where
     q'                    = isDelimiter (ss `or` all) l
     continueWith r ls' l' = (l' <>) <$> unlit' ws (ss `or` inferred q') r ls'
-    open' ls'             = continueWith q' ls'
+    open'                 = continueWith q'
     open                  = open' ls
     continue              = continueWith q ls
     close                 = continueWith Nothing ls
@@ -297,13 +299,13 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
     | otherwise          -> Left $ SpuriousDelimiter n c
 
   where
-    q'                 = isDelimiter (ss `or` all) l
-    continueWith r ls' = relit' (ss `or` inferred q') ts r ls'
-    continue           = (l :)                <$> continueWith q ls
-    blockOpen' ls' l'  = (emitOpen  ts l' <>) <$> continueWith q' ls'
-    blockOpen      l'  = blockOpen' ls l'
-    blockContinue  l'  = (emitCode  ts l' :)  <$> continueWith q ls
-    blockClose     l'  = (emitClose ts l' <>) <$> continueWith Nothing ls
+    q'                = isDelimiter (ss `or` all) l
+    continueWith      = relit' (ss `or` inferred q') ts
+    continue          = (l :)                <$> continueWith q ls
+    blockOpen' ls' l' = (emitOpen  ts l' <>) <$> continueWith q' ls'
+    blockOpen         = blockOpen' ls
+    blockContinue  l' = (emitCode  ts l' :)  <$> continueWith q ls
+    blockClose     l' = (emitClose ts l' <>) <$> continueWith Nothing ls
 
 data Error
   = SpuriousDelimiter Int Delimiter
