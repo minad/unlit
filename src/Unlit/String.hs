@@ -85,22 +85,20 @@ infixr 5 <+>
 x  <+> "" = x
 x  <+> y  = x <> " " <> y
 
-type Recogniser = String -> Maybe Delimiter
-
-isLaTeX :: Recogniser
+isLaTeX :: String -> Maybe Delimiter
 isLaTeX l
   | "\\begin{code}" `isPrefixOf` stripStart l = Just $ LaTeX Begin
   | "\\end{code}"   `isPrefixOf` stripStart l = Just $ LaTeX End
   | otherwise = Nothing
 
-isOrgMode :: Lang -> Recogniser
+isOrgMode :: Lang -> String -> Maybe Delimiter
 isOrgMode lang l
   | Just rest <- stripStart . stripEnd <$> stripPrefix "#+BEGIN_SRC" (stripStart l),
     Just lang' <- rest `hasLang` lang       = Just $ OrgMode Begin lang'
   | "#+END_SRC"   `isPrefixOf` stripStart l = Just $ OrgMode End Nothing
   | otherwise = Nothing
 
-isBird :: Recogniser
+isBird :: String -> Maybe Delimiter
 isBird l = bool Nothing (Just Bird) (l == ">" || "> " `isPrefixOf` l)
 
 stripBird :: String -> String
@@ -110,7 +108,7 @@ stripBird' :: WhitespaceMode -> String -> String
 stripBird' WsKeepAll    l = " " <> drop 1 l
 stripBird' WsKeepIndent l = drop 2 l
 
-isJekyll :: Lang -> Recogniser
+isJekyll :: Lang -> String -> Maybe Delimiter
 isJekyll lang l
   | Just rest <- stripStart <$> stripPrefix "{% highlight" (stripStart l),
     Just rest' <- stripEnd <$> stripSuffix "%}" (stripEnd rest),
@@ -118,13 +116,13 @@ isJekyll lang l
   | "{% endhighlight %}" `isPrefixOf` l = Just $ Jekyll End   lang
   | otherwise                           = Nothing
 
-isMarkdown :: Fence -> String -> Lang -> Recogniser
+isMarkdown :: Fence -> String -> Lang -> String -> Maybe Delimiter
 isMarkdown fence fenceStr lang l
   | Just rest <- stripStart . stripEnd <$> stripPrefix fenceStr l,
     Just lang' <- rest `hasLang` lang = Just $ Markdown fence lang'
   | otherwise                         = Nothing
 
-isAsciidoc :: Lang -> Recogniser
+isAsciidoc :: Lang -> String -> Maybe Delimiter
 isAsciidoc lang l
   | Just rest <- stripStart <$> stripPrefix "[source," l,
     Just rest' <- stripEnd <$> stripSuffix "]" (stripEnd rest),
@@ -136,7 +134,7 @@ asciidocFence :: [(Int,String)] -> Maybe [(Int,String)]
 asciidocFence ls | ((_,"----"):ls') <- ls = Just ls'
                  | otherwise              = Nothing
 
-isDelimiter :: Style -> Recogniser
+isDelimiter :: Style -> String -> Maybe Delimiter
 isDelimiter ds l = asum (map go ds)
   where
     go (LaTeX _)                = isLaTeX l

@@ -32,7 +32,7 @@ defaultOptions = Options
   , optOutputFile  = T.putStrLn
   , optWsMode      = WsKeepIndent
   , optGhc         = False
-  , optLanguage    = Nothing
+  , optLanguage    = NoLang
   }
 
 parseStyle' :: String -> Style
@@ -71,7 +71,7 @@ options =
     "Whitespace mode (all, indent)"
 
   , Option "l" ["language"]
-    (ReqArg (\arg opt -> return opt { optLanguage = Just (T.pack arg) })
+    (ReqArg (\arg opt -> return opt { optLanguage = Lang (T.pack arg) })
             "LANGUAGE")
     "Programming language (restrict fenced code blocks)"
 

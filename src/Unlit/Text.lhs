@@ -4,14 +4,14 @@
 >   , Style, parseStyle
 >   , WhitespaceMode(..), parseWhitespaceMode
 >   , all, infer, latex, bird, jekyll,  haskell, markdown, tildefence, backtickfence
->   , Lang, setLang
+>   , Lang(..), setLang
 >   , Error(..), showError
 > ) where
 
 > import Data.Bool (bool)
 > import Data.Foldable (asum)
 > import Data.Functor ((<$>))
-> import Data.Maybe (fromMaybe, maybeToList)
+> import Data.Maybe (maybeToList)
 > import Data.Monoid ((<>))
 > import Data.Text (Text, stripStart, stripEnd, stripPrefix, stripSuffix, isPrefixOf,
 >                   unlines, lines, pack, drop, toLower)
@@ -66,14 +66,19 @@ On the other hand, Markdown-style fences occur in two different variants.
 Furthermore they may be annotated with all sorts of information. Most prominently,
 their programming language.
 
-> type Lang = Maybe Text
+> data Lang = NoLang | Lang Text
+>   deriving (Eq, Show)
 
 > hasLang :: Text -> Lang -> Maybe Lang
-> hasLang "" Nothing          = Just Nothing
-> hasLang l  Nothing          = Just $ Just $ toLower l
-> hasLang l  (Just l')
->   | toLower l' == toLower l = Just $ Just $ toLower l'
+> hasLang "" NoLang           = Just NoLang
+> hasLang l  NoLang           = Just $ Lang $ toLower l
+> hasLang l  (Lang l')
+>   | toLower l' == toLower l = Just $ Lang $ toLower l'
 >   | otherwise               = Nothing
+
+> showLang :: Lang -> Text
+> showLang NoLang   = ""
+> showLang (Lang l) = l
 
 In order to emit these code blocks, we will define the
 following function.
@@ -81,15 +86,15 @@ following function.
 > emitDelimiter :: Delimiter -> Text
 > emitDelimiter (LaTeX Begin)         = "\\begin{code}"
 > emitDelimiter (LaTeX End)           = "\\end{code}"
-> emitDelimiter (OrgMode Begin l)     = "#+BEGIN_SRC" <+> fromMaybe "" l
+> emitDelimiter (OrgMode Begin l)     = "#+BEGIN_SRC" <+> showLang l
 > emitDelimiter (OrgMode End _)       = "#+END_SRC"
 > emitDelimiter  Bird                 = ">"
-> emitDelimiter (Jekyll Begin l)      = "{% highlight" <+> fromMaybe "" l <+> "%}"
+> emitDelimiter (Jekyll Begin l)      = "{% highlight" <+> showLang l <+> "%}"
 > emitDelimiter (Jekyll End   _)      = "{% endhighlight %}"
-> emitDelimiter (Asciidoc Begin l)    = "[source" <> maybe "" (", "<>) l <> "]\n----"
+> emitDelimiter (Asciidoc Begin l)    = "[source" <> bool "" (", "<> showLang l) (l /= NoLang) <> "]\n----"
 > emitDelimiter (Asciidoc End   _)    = "----"
-> emitDelimiter (Markdown Tilde l)    = "~~~" <+> fromMaybe "" l
-> emitDelimiter (Markdown Backtick l) = "```" <+> fromMaybe "" l
+> emitDelimiter (Markdown Tilde l)    = "~~~" <+> showLang l
+> emitDelimiter (Markdown Backtick l) = "```" <+> showLang l
 
 > infixr 5 <+>
 > (<+>) :: Text -> Text -> Text
@@ -100,23 +105,21 @@ following function.
 Furthermore, we need a set of functions which is able to recognise
 these code blocks.
 
-> type Recogniser = Text -> Maybe Delimiter
-
 For instance, in LaTeX-style, a codeblock is delimited by
 `\begin{code}` and `\end{code}` tags, which must appear at the first
 position (since we do not support indented code blocks).
 
-> isLaTeX :: Recogniser
+> isLaTeX :: Text -> Maybe Delimiter
 > isLaTeX l
 >   | "\\begin{code}" `isPrefixOf` stripStart l = Just $ LaTeX Begin
 >   | "\\end{code}"   `isPrefixOf` stripStart l = Just $ LaTeX End
 >   | otherwise = Nothing
 
-> isOrgMode :: Lang -> Recogniser
+> isOrgMode :: Lang -> Text -> Maybe Delimiter
 > isOrgMode lang l
 >   | Just rest <- stripStart . stripEnd <$> stripPrefix "#+BEGIN_SRC" (stripStart l),
 >     Just lang' <- rest `hasLang` lang       = Just $ OrgMode Begin lang'
->   | "#+END_SRC"   `isPrefixOf` stripStart l = Just $ OrgMode End Nothing
+>   | "#+END_SRC"   `isPrefixOf` stripStart l = Just $ OrgMode End NoLang
 >   | otherwise = Nothing
 
 In Bird-style, every line in a codeblock must start with a Bird tag.
@@ -124,7 +127,7 @@ A tagged line is defined as *either* a line containing solely the
 symbol '>', or a line starting with the symbol '>' followed by at
 least one space.
 
-> isBird :: Recogniser
+> isBird :: Text -> Maybe Delimiter
 > isBird l = bool Nothing (Just Bird) (l == ">" || "> " `isPrefixOf` l)
 
 Due to this definition, whenever we strip a bird tag, in normal
@@ -139,7 +142,7 @@ whitespace modes we also remove the first space following it.
 
 Then we have Jekyll Liquid code blocks.
 
-> isJekyll :: Lang -> Recogniser
+> isJekyll :: Lang -> Text -> Maybe Delimiter
 > isJekyll lang l
 >   | Just rest <- stripStart <$> stripPrefix "{% highlight" (stripStart l),
 >     Just rest' <- stripEnd <$> stripSuffix "%}" (stripEnd rest),
@@ -154,7 +157,7 @@ Below we only check if the given language occurs *anywhere* in the
 string; we don't bother parsing the entire line to see if it's
 well-formed Markdown.
 
-> isMarkdown :: Fence -> Text -> Lang -> Recogniser
+> isMarkdown :: Fence -> Text -> Lang -> Text -> Maybe Delimiter
 > isMarkdown fence fenceStr lang l
 >   | Just rest <- stripStart . stripEnd <$> stripPrefix fenceStr l,
 >     Just lang' <- rest `hasLang` lang = Just $ Markdown fence lang'
@@ -163,7 +166,7 @@ well-formed Markdown.
 The Asciidoc fence in the beginning takes two lines, `[source,lang]` and `----`.
 Here we just check for the source line. The second line will be consumed by asciidocBlock.
 
-> isAsciidoc :: Lang -> Recogniser
+> isAsciidoc :: Lang -> Text -> Maybe Delimiter
 > isAsciidoc lang l
 >   | Just rest <- stripStart <$> stripPrefix "[source," l,
 >     Just rest' <- stripEnd <$> stripSuffix "]" (stripEnd rest),
@@ -178,7 +181,7 @@ Here we just check for the source line. The second line will be consumed by asci
 In general, we will also need a function that checks, for a given
 line, whether it conforms to *any* of a set of given styles.
 
-> isDelimiter :: Style -> Recogniser
+> isDelimiter :: Style -> Text -> Maybe Delimiter
 > isDelimiter ds l = asum (map go ds)
 >   where
 >     go (LaTeX _)                = isLaTeX l
@@ -218,16 +221,16 @@ The options for source styles are as follows:
 > all, backtickfence, tildefence, bird, haskell, infer,
 >   jekyll, latex, markdown, orgmode, asciidoc :: Style
 > all           = latex <> markdown <> orgmode <> jekyll <> asciidoc
-> backtickfence = [Markdown Backtick Nothing]
-> tildefence    = [Markdown Tilde Nothing]
+> backtickfence = [Markdown Backtick NoLang]
+> tildefence    = [Markdown Tilde NoLang]
 > bird          = [Bird]
 > haskell       = latex <> bird
 > infer         = []
-> jekyll        = [Jekyll Begin Nothing, Jekyll End Nothing]
+> jekyll        = [Jekyll Begin NoLang, Jekyll End NoLang]
 > latex         = [LaTeX Begin, LaTeX End]
 > markdown      = bird <> tildefence <> backtickfence
-> orgmode       = [OrgMode Begin Nothing, OrgMode End Nothing]
-> asciidoc      = [Asciidoc Begin Nothing, Asciidoc End Nothing]
+> orgmode       = [OrgMode Begin NoLang, OrgMode End NoLang]
+> asciidoc      = [Asciidoc Begin NoLang, Asciidoc End NoLang]
 
 > parseStyle :: Text -> Maybe Style
 > parseStyle s = case toLower s of
@@ -261,7 +264,7 @@ It is possible to set the language of the source styles using the following func
 > getDelimLang (OrgMode  _ lang) = lang
 > getDelimLang (Jekyll   _ lang) = lang
 > getDelimLang (Asciidoc _ lang) = lang
-> getDelimLang _                 = Nothing
+> getDelimLang _                 = NoLang
 
 Additionally, when the source style is empty, the program will
 attempt to guess the style based on the first delimiter it
@@ -346,7 +349,7 @@ With this, the signature of `unlit'` becomes:
 >     close                 = continueWith Nothing ls
 >     lineIfKeepAll         = case ws of WsKeepAll    -> [""]; WsKeepIndent -> []
 >     lineIfKeepIndent      = case ws of WsKeepIndent -> [""]; WsKeepAll -> []
->     withoutLang           = maybe id (const $ setLang Nothing) q
+>     withoutLang           = maybe id (const $ setLang NoLang) q
 
 What do we want `relit` to do?
 ==============================
@@ -385,7 +388,7 @@ TODO: Currently, if a delimiter is indented, running `relit` will remove this
 
 > emitClose :: Delimiter -> Maybe Text -> [Text]
 > emitClose  Bird l = maybeToList l
-> emitClose  del  l = emitDelimiter (setBegin End $ setDelimLang Nothing del) : maybeToList l
+> emitClose  del  l = emitDelimiter (setBegin End $ setDelimLang NoLang del) : maybeToList l
 
 Using these simple functions we can easily define the `relit'`
 function.
@@ -417,14 +420,16 @@ function.
 
 >   where
 >     q'                = isDelimiter (withoutLang (ss `or` all)) l
->     ts'               = case q' >>= getDelimLang of Nothing -> ts; x@Just{} -> setDelimLang x ts
+>     ts'               = case getDelimLang <$> q' of
+>                           Just lang@Lang{} -> setDelimLang lang ts
+>                           _             -> ts
 >     continueWith      = relit' (ss `or` inferred q') ts
 >     continue          = (l :)                 <$> continueWith q ls
 >     blockOpen' ls' l' = (emitOpen  ts' l' <>) <$> continueWith q' ls'
 >     blockOpen         = blockOpen' ls
 >     blockContinue  l' = (emitCode  ts l' :)   <$> continueWith q ls
 >     blockClose     l' = (emitClose ts l' <>)  <$> continueWith Nothing ls
->     withoutLang       = maybe id (const $ setLang Nothing) q
+>     withoutLang       = maybe id (const $ setLang NoLang) q
 
 Error handling
 ==============

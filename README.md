@@ -123,16 +123,12 @@ x  <+> y  = x <> " " <> y
 Furthermore, we need a set of functions which is able to recognise
 these code blocks.
 
-``` haskell
-type Recogniser = Text -> Maybe Delimiter
-```
-
 For instance, in LaTeX-style, a codeblock is delimited by
 `\begin{code}` and `\end{code}` tags, which must appear at the first
 position (since we do not support indented code blocks).
 
 ``` haskell
-isLaTeX :: Recogniser
+isLaTeX :: Text -> Maybe Delimiter
 isLaTeX l
   | "\\begin{code}" `isPrefixOf` stripStart l = Just $ LaTeX Begin
   | "\\end{code}"   `isPrefixOf` stripStart l = Just $ LaTeX End
@@ -140,7 +136,7 @@ isLaTeX l
 ```
 
 ``` haskell
-isOrgMode :: Lang -> Recogniser
+isOrgMode :: Lang -> Text -> Maybe Delimiter
 isOrgMode lang l
   | Just rest <- stripStart . stripEnd <$> stripPrefix "#+BEGIN_SRC" (stripStart l),
     Just lang' <- rest `hasLang` lang       = Just $ OrgMode Begin lang'
@@ -154,7 +150,7 @@ symbol '>', or a line starting with the symbol '>' followed by at
 least one space.
 
 ``` haskell
-isBird :: Recogniser
+isBird :: Text -> Maybe Delimiter
 isBird l = bool Nothing (Just Bird) (l == ">" || "> " `isPrefixOf` l)
 ```
 
@@ -175,7 +171,7 @@ stripBird' WsKeepIndent l = drop 2 l
 Then we have Jekyll Liquid code blocks.
 
 ``` haskell
-isJekyll :: Lang -> Recogniser
+isJekyll :: Lang -> Text -> Maybe Delimiter
 isJekyll lang l
   | Just rest <- stripStart <$> stripPrefix "{% highlight" (stripStart l),
     Just rest' <- stripEnd <$> stripSuffix "%}" (stripEnd rest),
@@ -192,7 +188,7 @@ string; we don't bother parsing the entire line to see if it's
 well-formed Markdown.
 
 ``` haskell
-isMarkdown :: Fence -> Text -> Lang -> Recogniser
+isMarkdown :: Fence -> Text -> Lang -> Text -> Maybe Delimiter
 isMarkdown fence fenceStr lang l
   | Just rest <- stripStart . stripEnd <$> stripPrefix fenceStr l,
     Just lang' <- rest `hasLang` lang = Just $ Markdown fence lang'
@@ -203,7 +199,7 @@ The Asciidoc fence in the beginning takes two lines, `[source,lang]` and `----`.
 Here we just check for the source line. The second line will be consumed by asciidocBlock.
 
 ``` haskell
-isAsciidoc :: Lang -> Recogniser
+isAsciidoc :: Lang -> Text -> Maybe Delimiter
 isAsciidoc lang l
   | Just rest <- stripStart <$> stripPrefix "[source," l,
     Just rest' <- stripEnd <$> stripSuffix "]" (stripEnd rest),
@@ -222,7 +218,7 @@ In general, we will also need a function that checks, for a given
 line, whether it conforms to *any* of a set of given styles.
 
 ``` haskell
-isDelimiter :: Style -> Recogniser
+isDelimiter :: Style -> Text -> Maybe Delimiter
 isDelimiter ds l = asum (map go ds)
   where
     go (LaTeX _)                = isLaTeX l
