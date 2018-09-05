@@ -36,10 +36,10 @@ defaultOptions = Options
   }
 
 parseStyle' :: String -> Style
-parseStyle' arg = fromMaybe (error $ "non-existent style" ++ arg) $ parseStyle $ T.pack arg
+parseStyle' arg = fromMaybe (error $ "non-existent style " ++ arg) $ parseStyle $ T.pack arg
 
 parseWhitespaceMode' :: String -> WhitespaceMode
-parseWhitespaceMode' arg = fromMaybe (error $ "non-existent whitespace mode" ++ arg) $ parseWhitespaceMode $ T.pack arg
+parseWhitespaceMode' arg = fromMaybe (error $ "non-existent whitespace mode " ++ arg) $ parseWhitespaceMode $ T.pack arg
 
 options :: [ OptDescr (Options -> IO Options) ]
 options =
