@@ -20,7 +20,6 @@ stripStart, stripEnd, toLower :: String -> String
 stripStart = dropWhile Char.isSpace
 stripEnd   = dropWhileEnd Char.isSpace
 toLower    = map Char.toLower
-import Prelude hiding (all, or, String, unlines, lines, drop)
 
 data Delimiter
   = LaTeX    BeginEnd
