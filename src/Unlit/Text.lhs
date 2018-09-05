@@ -335,7 +335,7 @@ With this, the signature of `unlit'` becomes:
 >   (Just _o  , Just Bird) -> continue  [l]
 >   (Just o   , Just c)
 >     | o `match` c        -> close     lineIfKeepAll
->     | otherwise          -> Left      $ SpuriousBeginDelimiter n c
+>     | otherwise          -> Left      $ SpuriousDelimiter n c
 
 >   where
 >     q'                    = isDelimiter (maybe id (const $ setLang Nothing) q (ss `or` all)) l
@@ -412,7 +412,7 @@ function.
 >   (Just _o  , Just Bird) -> continue
 >   (Just o   , Just c)
 >     | o `match` c        -> blockClose Nothing
->     | otherwise          -> Left $ SpuriousBeginDelimiter n c
+>     | otherwise          -> Left $ SpuriousDelimiter n c
 
 >   where
 >     q'                = isDelimiter (maybe id (const $ setLang Nothing) q (ss `or` all)) l
@@ -430,14 +430,12 @@ Error handling
 In case of an error both `unlit` and `relit` return a value of the datatype `Error`.
 
 > data Error
->   = SpuriousBeginDelimiter Int Delimiter
->   | SpuriousEndDelimiter   Int Delimiter
->   | UnexpectedEnd              Delimiter
+>   = SpuriousDelimiter Int Delimiter
+>   | UnexpectedEnd         Delimiter
 >   deriving (Eq, Show)
 
 We can get a text representation of the error using `showError`.
 
 > showError :: Error -> Text
-> showError (UnexpectedEnd            q) = "unexpected end of file: unmatched " <> emitDelimiter q
-> showError (SpuriousBeginDelimiter n q) = "at line " <> pack (show n) <> ": spurious begin "  <> emitDelimiter q
-> showError (SpuriousEndDelimiter   n q) = "at line " <> pack (show n) <> ": spurious end "  <> emitDelimiter q
+> showError (UnexpectedEnd       q) = "unexpected end of file: unmatched " <> emitDelimiter q
+> showError (SpuriousDelimiter n q) = "at line " <> pack (show n) <> ": spurious "  <> emitDelimiter q

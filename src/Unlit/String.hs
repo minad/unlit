@@ -254,7 +254,7 @@ unlit' ws ss q ((n, l):ls) = case (q, q') of
   (Just _o  , Just Bird) -> continue  [l]
   (Just o   , Just c)
     | o `match` c        -> close     lineIfKeepAll
-    | otherwise          -> Left      $ SpuriousBeginDelimiter n c
+    | otherwise          -> Left      $ SpuriousDelimiter n c
 
   where
     q'                    = isDelimiter (maybe id (const $ setLang Nothing) q (ss `or` all)) l
@@ -308,7 +308,7 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
   (Just _o  , Just Bird) -> continue
   (Just o   , Just c)
     | o `match` c        -> blockClose Nothing
-    | otherwise          -> Left $ SpuriousBeginDelimiter n c
+    | otherwise          -> Left $ SpuriousDelimiter n c
 
   where
     q'                = isDelimiter (maybe id (const $ setLang Nothing) q (ss `or` all)) l
@@ -321,13 +321,11 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
     blockClose     l' = (emitClose ts l' <>)  <$> continueWith Nothing ls
 
 data Error
-  = SpuriousBeginDelimiter Int Delimiter
-  | SpuriousEndDelimiter   Int Delimiter
-  | UnexpectedEnd              Delimiter
+  = SpuriousDelimiter Int Delimiter
+  | UnexpectedEnd         Delimiter
   deriving (Eq, Show)
 
 showError :: Error -> String
-showError (UnexpectedEnd            q) = "unexpected end of file: unmatched " <> emitDelimiter q
-showError (SpuriousBeginDelimiter n q) = "at line " <>  (show n) <> ": spurious begin "  <> emitDelimiter q
-showError (SpuriousEndDelimiter   n q) = "at line " <>  (show n) <> ": spurious end "  <> emitDelimiter q
+showError (UnexpectedEnd       q) = "unexpected end of file: unmatched " <> emitDelimiter q
+showError (SpuriousDelimiter n q) = "at line " <>  (show n) <> ": spurious "  <> emitDelimiter q
 

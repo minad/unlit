@@ -415,7 +415,7 @@ unlit' ws ss q ((n, l):ls) = case (q, q') of
   (Just _o  , Just Bird) -> continue  [l]
   (Just o   , Just c)
     | o `match` c        -> close     lineIfKeepAll
-    | otherwise          -> Left      $ SpuriousBeginDelimiter n c
+    | otherwise          -> Left      $ SpuriousDelimiter n c
 ```
 
 ``` haskell
@@ -514,7 +514,7 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
   (Just _o  , Just Bird) -> continue
   (Just o   , Just c)
     | o `match` c        -> blockClose Nothing
-    | otherwise          -> Left $ SpuriousBeginDelimiter n c
+    | otherwise          -> Left $ SpuriousDelimiter n c
 ```
 
 ``` haskell
@@ -536,9 +536,8 @@ In case of an error both `unlit` and `relit` return a value of the datatype `Err
 
 ``` haskell
 data Error
-  = SpuriousBeginDelimiter Int Delimiter
-  | SpuriousEndDelimiter   Int Delimiter
-  | UnexpectedEnd              Delimiter
+  = SpuriousDelimiter Int Delimiter
+  | UnexpectedEnd         Delimiter
   deriving (Eq, Show)
 ```
 
@@ -546,8 +545,7 @@ We can get a text representation of the error using `showError`.
 
 ``` haskell
 showError :: Error -> Text
-showError (UnexpectedEnd            q) = "unexpected end of file: unmatched " <> emitDelimiter q
-showError (SpuriousBeginDelimiter n q) = "at line " <> pack (show n) <> ": spurious begin "  <> emitDelimiter q
-showError (SpuriousEndDelimiter   n q) = "at line " <> pack (show n) <> ": spurious end "  <> emitDelimiter q
+showError (UnexpectedEnd       q) = "unexpected end of file: unmatched " <> emitDelimiter q
+showError (SpuriousDelimiter n q) = "at line " <> pack (show n) <> ": spurious "  <> emitDelimiter q
 ```
 
