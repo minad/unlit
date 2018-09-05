@@ -1,0 +1,13 @@
+
+main :: IO ()
+main =
+  putStrLn "Hello, World"
+
+#include <stdio.h>
+int main() {
+  puts("Hello, World");
+  return 0;
+}
+
+some
+text

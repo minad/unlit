@@ -1,5 +1,6 @@
 test/ghcunlit
 test/roundtrip.*
+test/*.out
 stack.yaml
 .stack-work
 dist

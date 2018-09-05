@@ -1,0 +1,24 @@
+comment1
+
+#+BEGIN_SRC haskell
+main :: IO ()
+main =
+  putStrLn "Hello, World"
+#+END_SRC
+
+comment2
+
+#+BEGIN_SRC c
+#include <stdio.h>
+int main() {
+  puts("Hello, World");
+  return 0;
+}
+#+END_SRC
+
+comment3
+
+#+BEGIN_SRC
+some
+text
+#+END_SRC

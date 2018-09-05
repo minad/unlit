@@ -70,7 +70,7 @@ options =
             "WHITESPACE_MODE")
     "Whitespace mode (all, indent)"
 
-  , Option [] ["language"]
+  , Option "l" ["language"]
     (ReqArg (\arg opt -> return opt { optLanguage = Just (T.pack arg) })
             "LANGUAGE")
     "Programming language (restrict fenced code blocks)"

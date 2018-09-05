@@ -1,0 +1,24 @@
+comment1
+
+\begin{code}
+main :: IO ()
+main =
+  putStrLn "Hello, World"
+\end{code}
+
+comment2
+
+\begin{code}
+#include <stdio.h>
+int main() {
+  puts("Hello, World");
+  return 0;
+}
+\end{code}
+
+comment3
+
+\begin{code}
+some
+text
+\end{code}

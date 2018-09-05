@@ -1,0 +1,24 @@
+comment1
+
+{% highlight haskell %}
+main :: IO ()
+main =
+  putStrLn "Hello, World"
+{% endhighlight %}
+
+comment2
+
+{% highlight c %}
+#include <stdio.h>
+int main() {
+  puts("Hello, World");
+  return 0;
+}
+{% endhighlight %}
+
+comment3
+
+{% highlight %}
+some
+text
+{% endhighlight %}

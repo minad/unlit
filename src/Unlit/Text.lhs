@@ -13,8 +13,8 @@
 > import Data.Functor ((<$>))
 > import Data.Maybe (fromMaybe, maybeToList)
 > import Data.Monoid ((<>))
-> import Data.Text (Text, stripStart, stripEnd, isPrefixOf, isSuffixOf,
->                   isInfixOf, unlines, lines, pack, drop, toLower)
+> import Data.Text (Text, stripStart, stripEnd, stripPrefix, stripSuffix, isPrefixOf,
+>                   unlines, lines, pack, drop, toLower)
 > import Prelude hiding (all, or, String, unlines, lines, drop)
 
 What are literate programs?
@@ -29,7 +29,7 @@ blocks.
 >   | OrgMode  BeginEnd Lang
 >   | Bird
 >   | Jekyll   BeginEnd Lang
->   | Markdown Fence Lang
+>   | Markdown Fence    Lang
 >   | Asciidoc BeginEnd Lang
 >   deriving (Eq, Show)
 
@@ -68,9 +68,12 @@ their programming language.
 
 > type Lang = Maybe Text
 
-> containsLang :: Text -> Lang -> Bool
-> containsLang _ Nothing     = True
-> containsLang l (Just lang) = toLower lang `isInfixOf` toLower l
+> hasLang :: Text -> Lang -> Maybe Lang
+> hasLang "" Nothing          = Just Nothing
+> hasLang l  Nothing          = Just $ Just $ toLower l
+> hasLang l  (Just l')
+>   | toLower l' == toLower l = Just $ Just $ toLower l'
+>   | otherwise               = Nothing
 
 In order to emit these code blocks, we will define the
 following function.
@@ -111,8 +114,8 @@ position (since we do not support indented code blocks).
 
 > isOrgMode :: Lang -> Recogniser
 > isOrgMode lang l
->   | "#+BEGIN_SRC" `isPrefixOf` stripStart l
->     && l `containsLang` lang                = Just $ OrgMode Begin lang
+>   | Just rest <- stripStart . stripEnd <$> stripPrefix "#+BEGIN_SRC" (stripStart l),
+>     Just lang' <- rest `hasLang` lang       = Just $ OrgMode Begin lang'
 >   | "#+END_SRC"   `isPrefixOf` stripStart l = Just $ OrgMode End Nothing
 >   | otherwise = Nothing
 
@@ -138,9 +141,9 @@ Then we have Jekyll Liquid code blocks.
 
 > isJekyll :: Lang -> Recogniser
 > isJekyll lang l
->   | "{% highlight" `isPrefixOf` stripStart l
->     && l `containsLang` lang
->     && "%}" `isSuffixOf` stripEnd l     = Just $ Jekyll Begin lang
+>   | Just rest <- stripStart <$> stripPrefix "{% highlight" (stripStart l),
+>     Just rest' <- stripEnd <$> stripSuffix "%}" (stripEnd rest),
+>     Just lang' <- rest' `hasLang` lang  = Just $ Jekyll Begin lang'
 >   | "{% endhighlight %}" `isPrefixOf` l = Just $ Jekyll End   lang
 >   | otherwise                           = Nothing
 
@@ -153,20 +156,20 @@ well-formed Markdown.
 
 > isMarkdown :: Fence -> Text -> Lang -> Recogniser
 > isMarkdown fence fenceStr lang l
->   | fenceStr `isPrefixOf` stripStart l =
->     Just $ Markdown fence $ bool Nothing lang (l `containsLang` lang)
->   | otherwise = Nothing
+>   | Just rest <- stripStart . stripEnd <$> stripPrefix fenceStr l,
+>     Just lang' <- rest `hasLang` lang = Just $ Markdown fence lang'
+>   | otherwise                         = Nothing
 
 The Asciidoc fence in the beginning takes two lines, `[source,lang]` and `----`.
 Here we just check for the source line. The second line will be consumed by asciidocBlock.
 
 > isAsciidoc :: Lang -> Recogniser
 > isAsciidoc lang l
->   | "[source" `isPrefixOf` l
->     && l `containsLang` lang
->     && "]" `isSuffixOf` stripEnd l = Just $ Asciidoc Begin lang
->   | "----" `isPrefixOf` l          = Just $ Asciidoc End   lang
->   | otherwise                      = Nothing
+>   | Just rest <- stripStart <$> stripPrefix "[source," l,
+>     Just rest' <- stripEnd <$> stripSuffix "]" (stripEnd rest),
+>     Just lang' <- rest' `hasLang` lang = Just $ Asciidoc Begin lang'
+>   | "----" `isPrefixOf` l              = Just $ Asciidoc End   lang
+>   | otherwise                          = Nothing
 
 > asciidocFence :: [(Int,Text)] -> Maybe [(Int,Text)]
 > asciidocFence ls | ((_,"----"):ls') <- ls = Just ls'
@@ -190,12 +193,12 @@ And, for the styles which use opening and closing brackets, we will
 need a function that checks if these pairs match.
 
 > match :: Delimiter -> Delimiter -> Bool
-> match (LaTeX Begin)      (LaTeX End)          = True
-> match (Jekyll Begin _)   (Jekyll End _)       = True
-> match (OrgMode Begin _)  (OrgMode End _)      = True
-> match (Asciidoc Begin _) (Asciidoc End _)     = True
-> match (Markdown f _)     (Markdown g Nothing) = f == g
-> match  _                  _                   = False
+> match (LaTeX Begin)      (LaTeX End)      = True
+> match (Jekyll Begin _)   (Jekyll End _)   = True
+> match (OrgMode Begin _)  (OrgMode End _)  = True
+> match (Asciidoc Begin _) (Asciidoc End _) = True
+> match (Markdown f _)     (Markdown g _)   = f == g
+> match  _                  _               = False
 
 Note that Bird-tags are notably absent from the `match` function, as
 they are a special case.
@@ -244,13 +247,21 @@ The options for source styles are as follows:
 It is possible to set the language of the source styles using the following function.
 
 > setLang :: Lang -> Style -> Style
-> setLang = fmap . setLang'
+> setLang = fmap . setDelimLang
 
-> setLang' :: Lang -> Delimiter -> Delimiter
-> setLang' lang (Markdown fence _)   = Markdown fence lang
-> setLang' lang (OrgMode beginEnd _) = OrgMode beginEnd lang
-> setLang' lang (Jekyll beginEnd _)  = Jekyll beginEnd lang
-> setLang' _     d                   = d
+> setDelimLang :: Lang -> Delimiter -> Delimiter
+> setDelimLang lang (Markdown fence _)   = Markdown fence lang
+> setDelimLang lang (Asciidoc fence _)   = Asciidoc fence lang
+> setDelimLang lang (OrgMode beginEnd _) = OrgMode beginEnd lang
+> setDelimLang lang (Jekyll beginEnd _)  = Jekyll beginEnd lang
+> setDelimLang _     d                   = d
+
+> getDelimLang :: Delimiter -> Lang
+> getDelimLang (Markdown _ lang) = lang
+> getDelimLang (OrgMode  _ lang) = lang
+> getDelimLang (Jekyll   _ lang) = lang
+> getDelimLang (Asciidoc _ lang) = lang
+> getDelimLang _                 = Nothing
 
 Additionally, when the source style is empty, the program will
 attempt to guess the style based on the first delimiter it
@@ -306,28 +317,28 @@ With this, the signature of `unlit'` becomes:
 > unlit' _ _ (Just Bird) []  = Right []
 > unlit' _ _ (Just o)    []  = Left $ UnexpectedEnd o
 > unlit' ws ss q ((n, l):ls) = case (q, q') of
->
+
 >   (Nothing  , Nothing)   -> continue  lineIfKeepAll
->
+
 >   (Just Bird, Nothing)   -> close     lineIfKeepAll
 >   (Just _o  , Nothing)   -> continue  [l]
->
+
 >   (Nothing  , Just Bird) -> open      $ lineIfKeepIndent <> [stripBird' ws l]
 >   (Nothing  , Just (Asciidoc Begin _))
 >     | Just ls' <- asciidocFence ls
 >                          -> open' ls' $ lineIfKeepAll <> lineIfKeepIndent
 >   (Nothing  , Just c)
 >     | isBegin c          -> open      $ lineIfKeepAll <> lineIfKeepIndent
->     | otherwise          -> Left      $ SpuriousDelimiter n c
->
+>     | otherwise          -> continue  lineIfKeepAll
+
 >   (Just Bird, Just Bird) -> continue  [stripBird' ws l]
 >   (Just _o  , Just Bird) -> continue  [l]
 >   (Just o   , Just c)
 >     | o `match` c        -> close     lineIfKeepAll
->     | otherwise          -> Left      $ SpuriousDelimiter n c
->
+>     | otherwise          -> Left      $ SpuriousBeginDelimiter n c
+
 >   where
->     q'                    = isDelimiter (ss `or` all) l
+>     q'                    = isDelimiter (maybe id (const $ setLang Nothing) q (ss `or` all)) l
 >     continueWith r ls' l' = (l' <>) <$> unlit' ws (ss `or` inferred q') r ls'
 >     open'                 = continueWith q'
 >     open                  = open' ls
@@ -373,7 +384,7 @@ TODO: Currently, if a delimiter is indented, running `relit` will remove this
 
 > emitClose :: Delimiter -> Maybe Text -> [Text]
 > emitClose  Bird l = maybeToList l
-> emitClose  del  l = emitDelimiter (setBegin End $ setLang' Nothing del) : maybeToList l
+> emitClose  del  l = emitDelimiter (setBegin End $ setDelimLang Nothing del) : maybeToList l
 
 Using these simple functions we can easily define the `relit'`
 function.
@@ -383,34 +394,35 @@ function.
 > relit' _ ts (Just Bird) [] = Right (emitClose ts Nothing)
 > relit' _ _  (Just o)    [] = Left $ UnexpectedEnd o
 > relit' ss ts q ((n, l):ls) = case (q, q') of
->
+
 >   (Nothing  , Nothing)   -> continue
->
+
 >   (Nothing  , Just Bird) -> blockOpen $ Just (stripBird l)
 >   (Nothing  , Just (Asciidoc Begin _))
 >     | Just ls' <- asciidocFence ls
 >                          -> blockOpen' ls' Nothing
 >   (Nothing  , Just c)
 >     | isBegin c          -> blockOpen Nothing
->     | otherwise          -> Left $ SpuriousDelimiter n c
->
+>     | otherwise          -> continue
+
 >   (Just Bird, Nothing)   -> blockClose $ Just l
 >   (Just _o  , Nothing)   -> blockContinue l
->
+
 >   (Just Bird, Just Bird) -> blockContinue $ stripBird l
 >   (Just _o  , Just Bird) -> continue
 >   (Just o   , Just c)
 >     | o `match` c        -> blockClose Nothing
->     | otherwise          -> Left $ SpuriousDelimiter n c
->
+>     | otherwise          -> Left $ SpuriousBeginDelimiter n c
+
 >   where
->     q'                = isDelimiter (ss `or` all) l
+>     q'                = isDelimiter (maybe id (const $ setLang Nothing) q (ss `or` all)) l
+>     ts'               = case q' >>= getDelimLang of Nothing -> ts; x@Just{} -> setDelimLang x ts
 >     continueWith      = relit' (ss `or` inferred q') ts
->     continue          = (l :)                <$> continueWith q ls
->     blockOpen' ls' l' = (emitOpen  ts l' <>) <$> continueWith q' ls'
+>     continue          = (l :)                 <$> continueWith q ls
+>     blockOpen' ls' l' = (emitOpen  ts' l' <>) <$> continueWith q' ls'
 >     blockOpen         = blockOpen' ls
->     blockContinue  l' = (emitCode  ts l' :)  <$> continueWith q ls
->     blockClose     l' = (emitClose ts l' <>) <$> continueWith Nothing ls
+>     blockContinue  l' = (emitCode  ts l' :)   <$> continueWith q ls
+>     blockClose     l' = (emitClose ts l' <>)  <$> continueWith Nothing ls
 
 Error handling
 ==============
@@ -418,12 +430,14 @@ Error handling
 In case of an error both `unlit` and `relit` return a value of the datatype `Error`.
 
 > data Error
->   = SpuriousDelimiter Int Delimiter
->   | UnexpectedEnd     Delimiter
+>   = SpuriousBeginDelimiter Int Delimiter
+>   | SpuriousEndDelimiter   Int Delimiter
+>   | UnexpectedEnd              Delimiter
 >   deriving (Eq, Show)
 
 We can get a text representation of the error using `showError`.
 
 > showError :: Error -> Text
-> showError (UnexpectedEnd       q) = "unexpected end of file: unmatched " <> emitDelimiter q
-> showError (SpuriousDelimiter n q) = "at line " <> pack (show n) <> ": spurious "  <> emitDelimiter q
+> showError (UnexpectedEnd            q) = "unexpected end of file: unmatched " <> emitDelimiter q
+> showError (SpuriousBeginDelimiter n q) = "at line " <> pack (show n) <> ": spurious begin "  <> emitDelimiter q
+> showError (SpuriousEndDelimiter   n q) = "at line " <> pack (show n) <> ": spurious end "  <> emitDelimiter q

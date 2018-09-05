@@ -1,0 +1,27 @@
+comment1
+
+[source, haskell]
+----
+main :: IO ()
+main =
+  putStrLn "Hello, World"
+----
+
+comment2
+
+[source, c]
+----
+#include <stdio.h>
+int main() {
+  puts("Hello, World");
+  return 0;
+}
+----
+
+comment3
+
+[source]
+----
+some
+text
+----
