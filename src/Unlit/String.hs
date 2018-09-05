@@ -257,7 +257,7 @@ unlit' ws ss q ((n, l):ls) = case (q, q') of
     | otherwise          -> Left      $ SpuriousDelimiter n c
 
   where
-    q'                    = isDelimiter (maybe id (const $ setLang Nothing) q (ss `or` all)) l
+    q'                    = isDelimiter (withoutLang (ss `or` all)) l
     continueWith r ls' l' = (l' <>) <$> unlit' ws (ss `or` inferred q') r ls'
     open'                 = continueWith q'
     open                  = open' ls
@@ -265,6 +265,7 @@ unlit' ws ss q ((n, l):ls) = case (q, q') of
     close                 = continueWith Nothing ls
     lineIfKeepAll         = case ws of WsKeepAll    -> [""]; WsKeepIndent -> []
     lineIfKeepIndent      = case ws of WsKeepIndent -> [""]; WsKeepAll -> []
+    withoutLang           = maybe id (const $ setLang Nothing) q
 
 relit :: Style -> Delimiter -> String -> Either Error String
 relit ss ts = fmap unlines . relit' ss ts Nothing . zip [1..] . lines
@@ -311,7 +312,7 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
     | otherwise          -> Left $ SpuriousDelimiter n c
 
   where
-    q'                = isDelimiter (maybe id (const $ setLang Nothing) q (ss `or` all)) l
+    q'                = isDelimiter (withoutLang (ss `or` all)) l
     ts'               = case q' >>= getDelimLang of Nothing -> ts; x@Just{} -> setDelimLang x ts
     continueWith      = relit' (ss `or` inferred q') ts
     continue          = (l :)                 <$> continueWith q ls
@@ -319,6 +320,7 @@ relit' ss ts q ((n, l):ls) = case (q, q') of
     blockOpen         = blockOpen' ls
     blockContinue  l' = (emitCode  ts l' :)   <$> continueWith q ls
     blockClose     l' = (emitClose ts l' <>)  <$> continueWith Nothing ls
+    withoutLang       = maybe id (const $ setLang Nothing) q
 
 data Error
   = SpuriousDelimiter Int Delimiter
